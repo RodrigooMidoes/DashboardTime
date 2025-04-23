@@ -8,7 +8,7 @@ import { Button } from "./ui/button"
 import { ChevronLeft, ChevronRight, FileDown } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import * as XLSX from 'xlsx'
-import { format, parseISO } from "date-fns"
+import { format } from "date-fns"
 
 interface LogsTableProps {
   dateRange?: {
@@ -26,6 +26,7 @@ export function LogsTable({ dateRange, usernameFilter }: LogsTableProps) {
     hasNextPage: false,
     endCursor: null
   })
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [currentCursor, setCurrentCursor] = useState<string | null>(null)
   const [cursorHistory, setCursorHistory] = useState<string[]>([])
   const [totalCount, setTotalCount] = useState<number>(0)
@@ -58,6 +59,7 @@ export function LogsTable({ dateRange, usernameFilter }: LogsTableProps) {
       }
 
       // Group logs by project and user
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const dataMap: Record<string, Record<string, any>> = {};
       console.log(allLogs)
       allLogs.forEach(log => {
@@ -131,7 +133,8 @@ export function LogsTable({ dateRange, usernameFilter }: LogsTableProps) {
       let endCursor: string | null = null;
 
       while (hasNextPage) {
-        const response = await fetch('https://gitlab.informantem.gen/api/graphql', {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const response: any = await fetch('https://gitlab.informantem.gen/api/graphql', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
