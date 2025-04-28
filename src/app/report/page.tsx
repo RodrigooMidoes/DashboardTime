@@ -5,7 +5,7 @@ import { ReportForm } from '@/components/report-form'
 import { LogsTable } from '@/components/logs-table'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { format } from 'date-fns'
+import { format, addDays } from 'date-fns'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft } from 'lucide-react'
@@ -14,10 +14,15 @@ export default function LogsPage() {
   const [filters, setFilters] = useState<{
     dateRange?: { from: Date; to: Date }
     username?: string
+    apiDateRange?: { from: Date; to: Date } | null
   }>({
     dateRange: {
       from: new Date(),
-      to: new Date(new Date().setDate(new Date().getDate() + 7)),
+      to: addDays(new Date(), 7),
+    },
+    apiDateRange: {
+      from: new Date(new Date().setDate(new Date().getDate() - 1)),
+      to: addDays(new Date(), 7),
     }
   })
 
@@ -25,19 +30,33 @@ export default function LogsPage() {
     dateRange: { from: Date; to: Date }
     username?: string
   }) => {
+    // For API queries, we need to adjust the dates to account for UTC conversion
+    // Since 23:00 UTC is 00:00 next day in UTC+1, we need to include previous day
+    const apiFrom = new Date(values.dateRange.from)
+    apiFrom.setDate(apiFrom.getDate() - 1) // Include previous day
+
     setFilters({
-      dateRange: values.dateRange,
-      username: values.username || undefined
+      dateRange: values.dateRange, // Original dates for display
+      username: values.username || undefined,
+      apiDateRange: {
+        from: apiFrom,
+        to: values.dateRange.to
+      }
     })
   }
 
   const handleReset = () => {
+    const today = new Date()
     setFilters({
       dateRange: {
-        from: new Date(),
-        to: new Date(new Date().setDate(new Date().getDate() + 7)),
+        from: today,
+        to: addDays(today, 7),
       },
-      username: undefined
+      username: undefined,
+      apiDateRange: {
+        from: addDays(today, -1), // Include previous day
+        to: addDays(today, 7)
+      }
     })
   }
 
@@ -99,6 +118,7 @@ export default function LogsPage() {
           <LogsTable
             dateRange={filters.dateRange}
             usernameFilter={filters.username}
+            apiDateRange={filters.apiDateRange}
           />
         </CardContent>
       </Card>
