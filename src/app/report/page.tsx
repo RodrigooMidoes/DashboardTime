@@ -32,7 +32,13 @@ export default function LogsPage() {
   }
 
   const handleReset = () => {
-    setFilters({})
+    setFilters({
+      dateRange: {
+        from: new Date(),
+        to: new Date(new Date().setDate(new Date().getDate() + 7)),
+      },
+      username: undefined
+    })
   }
 
   const isFilterActive = !!filters.dateRange || !!filters.username

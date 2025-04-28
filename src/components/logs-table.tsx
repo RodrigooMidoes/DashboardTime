@@ -134,7 +134,7 @@ export function LogsTable({ dateRange, usernameFilter }: LogsTableProps) {
 
       while (hasNextPage) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const response: any = await fetch('https://gitlab.informantem.gen/api/graphql', {
+        const response: any = await fetch(`${process.env.NEXT_PUBLIC_GITLAB_URL}/api/graphql`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -175,8 +175,8 @@ export function LogsTable({ dateRange, usernameFilter }: LogsTableProps) {
             `,
             variables: {
               cursor: endCursor,
-              startDate: dateRange?.from.toISOString(),
-              endDate: dateRange?.to.toISOString(),
+              startDate: format(dateRange!.from, 'yyyy-MM-dd'),
+              endDate: format(dateRange!.to, 'yyyy-MM-dd'),
               username: usernameFilter || null
             }
           })
@@ -202,7 +202,7 @@ export function LogsTable({ dateRange, usernameFilter }: LogsTableProps) {
   const fetchLogs = useCallback(async (cursor: string | null = null) => {
     setLoading(true)
     try {
-      const response = await fetch('https://gitlab.informantem.gen/api/graphql', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_GITLAB_URL}/api/graphql`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
