@@ -1,15 +1,15 @@
 'use client'
-import { TimeLog } from "@/app/models/timelog"
+import { TimeLog } from "@/models/timelog"
 import { useCallback, useEffect, useState } from "react"
 import { Skeleton } from "./ui/skeleton"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "./ui/table"
-import { PageInfo } from "@/app/models/pageInfo"
+import { PageInfo } from "@/models/pageInfo"
 import { Button } from "./ui/button"
 import { ChevronLeft, ChevronRight, FileDown } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import * as XLSX from 'xlsx'
 import { format, addHours } from 'date-fns'
-import type { ApiResponse } from "@/app/models/apiResponse"
+import type { ApiResponse } from "@/models/apiResponse"
 
 interface LogsTableProps {
   dateRange?: { from: Date; to: Date } | null
@@ -293,9 +293,17 @@ export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTable
     return projectName.charAt(0).toUpperCase() + projectName.slice(1)
   }
 
-  const currentPosition = cursorHistory.length * pageSize
-  const showingFrom = currentPosition + 1
-  const showingTo = currentPosition + logs.length
+  // Filter logs based on date range
+  const filteredLogs = logs.filter(log => {
+    if (!dateRange?.from) return true;
+    const logDate = new Date(log.spentAt);
+    return logDate >= new Date(dateRange.from);
+  });
+
+  const currentPosition = cursorHistory.length * pageSize;
+  const showingFrom = filteredLogs.length > 0 ? currentPosition + 1 : 0;
+  const showingTo = currentPosition + filteredLogs.length;
+  const hasNoResults = filteredLogs.length === 0;
 
   if (loading && !logs.length) return (
     <div className="space-y-4">
@@ -321,7 +329,7 @@ export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTable
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={exportToExcel} variant="outline" className="ml-4" disabled={loading}>
+        <Button onClick={exportToExcel} variant="outline" className="ml-4" disabled={loading || hasNoResults}>
           <FileDown className="mr-2 h-4 w-4" />
           Export Excel
         </Button>
@@ -342,27 +350,49 @@ export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTable
             <TableRow>
               <TableCell colSpan={5} className="text-center">Loading...</TableCell>
             </TableRow>
-          ) : logs.map((log, index) => (
-            <TableRow key={`${log.user.id}-${log.issue.id}-${index}`}>
-              <TableCell className="font-medium">{log.user.username}</TableCell>
-              <TableCell>{formatProjectName(log.project.fullPath)}</TableCell>
-              <TableCell>{log.issue.id.split('/').pop()}</TableCell>
-              <TableCell>{formatTimeSpent(log.timeSpent)}</TableCell>
-              <TableCell>{log.spentAt.toString().split('T')[0]}</TableCell>
+          ) : hasNoResults ? (
+            <TableRow>
+              <TableCell colSpan={5} className="text-center">
+                No logs found for the selected date range
+              </TableCell>
             </TableRow>
-          ))}
+          ) : (
+            filteredLogs.map((log, index) => (
+              <TableRow key={`${log.user.id}-${log.issue.id}-${index}`}>
+                <TableCell className="font-medium">{log.user.username}</TableCell>
+                <TableCell>{formatProjectName(log.project.fullPath)}</TableCell>
+                <TableCell>{log.issue.id.split('/').pop()}</TableCell>
+                <TableCell>{formatTimeSpent(log.timeSpent)}</TableCell>
+                <TableCell>{log.spentAt.toString().split('T')[0]}</TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
 
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          Showing {showingFrom} to {showingTo} of {totalCount} results
+          {hasNoResults ? (
+            `Showing 0 results`
+          ) : (
+            `Showing ${showingFrom} to ${showingTo} of ${totalCount} results`
+          )}
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={handlePreviousPage} disabled={!cursorHistory.length || loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePreviousPage}
+            disabled={!cursorHistory.length || loading || hasNoResults}
+          >
             <ChevronLeft className="h-4 w-4" /> Previous
           </Button>
-          <Button variant="outline" size="sm" onClick={handleNextPage} disabled={!pageInfo.hasNextPage || loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleNextPage}
+            disabled={!pageInfo.hasNextPage || loading || hasNoResults}
+          >
             Next <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
