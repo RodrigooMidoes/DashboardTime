@@ -1,49 +1,93 @@
-'use client'
-import { TimeLog } from "@/models/timelog"
-import { useCallback, useEffect, useState } from "react"
-import { Skeleton } from "./ui/skeleton"
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "./ui/table"
-import { PageInfo } from "@/models/pageInfo"
-import { Button } from "./ui/button"
-import { ChevronLeft, ChevronRight, FileDown } from "lucide-react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
-import * as XLSX from 'xlsx'
-import { format, addHours } from 'date-fns'
-import type { ApiResponse } from "@/models/apiResponse"
+"use client";
+import { TimeLog } from "@/models/timelog";
+import { useCallback, useEffect, useState } from "react";
+import { Skeleton } from "./ui/skeleton";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "./ui/table";
+import { PageInfo } from "@/models/pageInfo";
+import { Button } from "./ui/button";
+import { ChevronLeft, ChevronRight, FileDown } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import * as XLSX from "xlsx";
+import { format, addHours } from "date-fns";
+import type { ApiResponse } from "@/models/apiResponse";
 
 interface LogsTableProps {
-  dateRange?: { from: Date; to: Date } | null
-  usernameFilter?: string
-  apiDateRange?: { from: Date; to: Date } | null
+  dateRange?: { from: Date; to: Date } | null;
+  usernameFilter?: string;
+  apiDateRange?: { from: Date; to: Date } | null;
 }
 
-export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTableProps) {
-  const [logs, setLogs] = useState<TimeLog[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [pageInfo, setPageInfo] = useState<PageInfo>({ hasNextPage: false, endCursor: null })
+export function LogsTable({
+  dateRange,
+  usernameFilter,
+  apiDateRange,
+}: LogsTableProps) {
+  const [logs, setLogs] = useState<TimeLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pageInfo, setPageInfo] = useState<PageInfo>({
+    hasNextPage: false,
+    endCursor: null,
+  });
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [currentCursor, setCurrentCursor] = useState<string | null>(null)
-  const [cursorHistory, setCursorHistory] = useState<string[]>([])
-  const [totalCount, setTotalCount] = useState<number>(0)
-  const [pageSize, setPageSize] = useState<number>(20)
+  const [currentCursor, setCurrentCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [pageSize, setPageSize] = useState<number>(20);
 
   const convertToLocalDate = (utcDate: string) => {
-    const date = new Date(utcDate)
-    return addHours(date, 1) // Adjust for UTC+1
+    const date = new Date(utcDate);
+    return addHours(date, 1);
+  };
+
+  function toGitlabDate(date: Date, endOfDay = false) {
+    const d = new Date(date);
+    if (endOfDay) {
+      d.setHours(23, 59, 59, 999);
+    } else {
+      d.setHours(0, 0, 0, 0);
+    }
+    return d.toISOString();
   }
 
-  const fetchLogs = useCallback(async (cursor: string | null = null) => {
-    setLoading(true)
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_GITLAB_URL}/api/graphql`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_GITLAB_TOKEN}`
-        },
-        body: JSON.stringify({
-          query: `
+  const fetchLogs = useCallback(
+    async (cursor: string | null = null) => {
+      setLoading(true);
+      try {
+        console.log("pageSize", pageSize);
+        console.log(
+          "startDate",
+          apiDateRange ? toGitlabDate(apiDateRange.from) : null
+        );
+        console.log(
+          "endDate",
+          apiDateRange ? format(apiDateRange.to, "yyyy-MM-dd") : null
+        );
+        console.log("usernameFilter", usernameFilter);
+
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_GITLAB_URL}/api/graphql`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_GITLAB_TOKEN}`,
+            },
+            body: JSON.stringify({
+              query: `
             query GetAllLogs($cursor: String, $first: Int, $startDate: Time, $endDate: Time, $username: String) {
               timelogs(
                 groupId: "gid://gitlab/Group/6",
@@ -76,58 +120,74 @@ export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTable
               }
             }
           `,
-          variables: {
-            cursor,
-            first: pageSize,
-            startDate: apiDateRange ? format(apiDateRange.from, 'yyyy-MM-dd') : null,
-            endDate: apiDateRange ? format(apiDateRange.to, 'yyyy-MM-dd') : null,
-            username: usernameFilter || null
+              variables: {
+                cursor,
+                first: pageSize,
+                startDate: apiDateRange
+                  ? toGitlabDate(apiDateRange.from)
+                  : null,
+                endDate: apiDateRange
+                  ? toGitlabDate(apiDateRange.to, true)
+                  : null,
+                username: usernameFilter || null,
+              },
+            }),
           }
-        })
-      })
+        );
 
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
 
-      const result: ApiResponse = await response.json()
+        const result: ApiResponse = await response.json();
 
-      const processedNodes = result.data.timelogs.nodes.map(log => {
-        const localDate = convertToLocalDate(log.spentAt)
-        return {
-          ...log,
-          spentAt: localDate.toISOString(),
-          spentAtDisplay: format(localDate, 'yyyy-MM-dd')
-        }
-      })
+        console.log("GraphQL response:", result);
 
-      setLogs(processedNodes)
-      setPageInfo(result.data.timelogs.pageInfo)
-      setTotalCount(result.data.timelogs.count)
+        const processedNodes = result.data.timelogs.nodes.map((log) => {
+          const localDate = convertToLocalDate(log.spentAt);
+          return {
+            ...log,
+            spentAt: localDate.toISOString(),
+            spentAtDisplay: format(localDate, "yyyy-MM-dd"),
+          };
+        });
 
-      if (cursor) setCursorHistory(prev => [...prev, cursor])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }, [apiDateRange, pageSize, usernameFilter])
+        setLogs(processedNodes);
+        setPageInfo(result.data.timelogs.pageInfo);
+        setTotalCount(result.data.timelogs.count);
 
-  useEffect(() => { fetchLogs() }, [fetchLogs])
+        if (cursor) setCursorHistory((prev) => [...prev, cursor]);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "An unknown error occurred"
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [apiDateRange, pageSize, usernameFilter]
+  );
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
 
   const fetchAllLogs = async () => {
     try {
-      let allNodes: TimeLog[] = []
-      let hasNextPage = true
-      let endCursor: string | null = null
+      let allNodes: TimeLog[] = [];
+      let hasNextPage = true;
+      let endCursor: string | null = null;
 
       while (hasNextPage) {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_GITLAB_URL}/api/graphql`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_GITLAB_TOKEN}`
-          },
-          body: JSON.stringify({
-            query: `
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_GITLAB_URL}/api/graphql`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_GITLAB_TOKEN}`,
+            },
+            body: JSON.stringify({
+              query: `
               query GetAllLogs($cursor: String, $startDate: Time, $endDate: Time, $username: String) {
                 timelogs(
                   groupId: "gid://gitlab/Group/6",
@@ -159,142 +219,160 @@ export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTable
                 }
               }
             `,
-            variables: {
-              cursor: endCursor,
-              startDate: apiDateRange ? format(apiDateRange.from, 'yyyy-MM-dd') : null,
-              endDate: apiDateRange ? format(apiDateRange.to, 'yyyy-MM-dd') : null,
-              username: usernameFilter || null
-            }
-          })
-        })
+              variables: {
+                cursor: endCursor,
+                startDate: apiDateRange
+                  ? format(apiDateRange.from, "yyyy-MM-dd")
+                  : null,
+                endDate: apiDateRange
+                  ? format(apiDateRange.to, "yyyy-MM-dd")
+                  : null,
+                username: usernameFilter || null,
+              },
+            }),
+          }
+        );
 
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result: any = await response.json()
-        if (result.errors) throw new Error(result.errors[0].message)
+        const result: any = await response.json();
+        if (result.errors) throw new Error(result.errors[0].message);
 
-        allNodes = [...allNodes, ...result.data.timelogs.nodes.map((log: TimeLog) => ({
-          ...log,
-          spentAt: convertToLocalDate(log.spentAt).toISOString()
-        }))]
-        hasNextPage = result.data.timelogs.pageInfo.hasNextPage
-        endCursor = result.data.timelogs.pageInfo.endCursor
+        allNodes = [
+          ...allNodes,
+          ...result.data.timelogs.nodes.map((log: TimeLog) => ({
+            ...log,
+            spentAt: convertToLocalDate(log.spentAt).toISOString(),
+          })),
+        ];
+        hasNextPage = result.data.timelogs.pageInfo.hasNextPage;
+        endCursor = result.data.timelogs.pageInfo.endCursor;
       }
 
-      return allNodes
+      return allNodes;
     } catch (err) {
-      console.error('Export failed:', err)
-      return []
+      console.error("Export failed:", err);
+      return [];
     }
-  }
+  };
 
   const exportToExcel = async () => {
     try {
-      const allLogs = await fetchAllLogs()
+      const allLogs = await fetchAllLogs();
       if (!allLogs.length) {
-        alert('No data to export')
-        return
+        alert("No data to export");
+        return;
       }
 
-      const dateColumns: string[] = []
-      const dateFormatsMap = new Map<string, string>()
+      const dateColumns: string[] = [];
+      const dateFormatsMap = new Map<string, string>();
 
       if (dateRange) {
-        const currentDate = new Date(dateRange.from)
-        const endDate = new Date(dateRange.to)
+        const currentDate = new Date(dateRange.from);
+        const endDate = new Date(dateRange.to);
 
         while (currentDate <= endDate) {
-          const dateKey = format(currentDate, 'yyyy-MM-dd')
-          dateColumns.push(dateKey)
-          dateFormatsMap.set(dateKey, dateKey)
-          currentDate.setDate(currentDate.getDate() + 1)
+          const dateKey = format(currentDate, "yyyy-MM-dd");
+          dateColumns.push(dateKey);
+          dateFormatsMap.set(dateKey, dateKey);
+          currentDate.setDate(currentDate.getDate() + 1);
         }
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const dataMap: Record<string, Record<string, any>> = {}
+      const dataMap: Record<string, Record<string, any>> = {};
 
-      allLogs.forEach(log => {
-        const projectId = log.project.id.split('/').pop()
-        const projectName = formatProjectName(log.project.fullPath)
-        const userKey = `${projectId}-${log.user.username}`
+      allLogs.forEach((log) => {
+        const projectId = log.project.id.split("/").pop();
+        const projectName = formatProjectName(log.project.fullPath);
+        const userKey = `${projectId}-${log.user.username}`;
 
         if (!dataMap[userKey]) {
           dataMap[userKey] = {
-            'Project Id': projectId,
-            'Project Name': projectName,
-            'Username': log.user.username,
-            ...Object.fromEntries(dateColumns.map(date => [date, 0]))
-          }
+            "Project Id": projectId,
+            "Project Name": projectName,
+            Username: log.user.username,
+            ...Object.fromEntries(dateColumns.map((date) => [date, 0])),
+          };
         }
 
-        const logDate = log.spentAt.split('T')[0]
-        const dateKey = dateFormatsMap.get(logDate)
-        if (dateKey) dataMap[userKey][dateKey] += log.timeSpent / 3600
-      })
+        const logDate = log.spentAt.split("T")[0];
+        const dateKey = dateFormatsMap.get(logDate);
+        if (dateKey) dataMap[userKey][dateKey] += log.timeSpent / 3600;
+      });
 
       const excelData = Object.values(dataMap).sort((a, b) => {
-        const projectCompare = a['Project Name'].toString().localeCompare(b['Project Name'].toString())
-        return projectCompare !== 0 ? projectCompare : a['Username'].toString().localeCompare(b['Username'].toString())
-      })
+        const projectCompare = a["Project Name"]
+          .toString()
+          .localeCompare(b["Project Name"].toString());
+        return projectCompare !== 0
+          ? projectCompare
+          : a["Username"].toString().localeCompare(b["Username"].toString());
+      });
 
       const ws = XLSX.utils.json_to_sheet(excelData, {
-        header: ['Project Id', 'Project Name', 'Username', ...dateColumns]
-      })
+        header: ["Project Id", "Project Name", "Username", ...dateColumns],
+      });
 
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, "TimeLogs")
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "TimeLogs");
 
-      let fileName = "TimeLogs"
-      if (dateRange) fileName += `_${format(dateRange.from, 'dd-MM-yyyy')}-${format(dateRange.to, 'dd-MM-yyyy')}`
-      if (usernameFilter) fileName += `_${usernameFilter}`
-      fileName += ".xlsx"
+      let fileName = "TimeLogs";
+      if (dateRange)
+        fileName += `_${format(dateRange.from, "dd-MM-yyyy")}-${format(
+          dateRange.to,
+          "dd-MM-yyyy"
+        )}`;
+      if (usernameFilter) fileName += `_${usernameFilter}`;
+      fileName += ".xlsx";
 
-      XLSX.writeFile(wb, fileName)
+      XLSX.writeFile(wb, fileName);
     } catch (error) {
-      console.error('Export failed:', error)
-      alert('Export failed. Please check console for details.')
+      console.error("Export failed:", error);
+      alert("Export failed. Please check console for details.");
     }
-  }
+  };
 
   const handleNextPage = () => {
     if (pageInfo.hasNextPage && pageInfo.endCursor) {
-      setCurrentCursor(pageInfo.endCursor)
-      fetchLogs(pageInfo.endCursor)
+      setCurrentCursor(pageInfo.endCursor);
+      fetchLogs(pageInfo.endCursor);
     }
-  }
+  };
 
   const handlePreviousPage = () => {
     if (cursorHistory.length > 0) {
-      const newHistory = [...cursorHistory]
-      newHistory.pop()
-      setCursorHistory(newHistory)
-      const prevCursor = newHistory.length > 0 ? newHistory[newHistory.length - 1] : null
-      setCurrentCursor(prevCursor)
-      fetchLogs(prevCursor)
+      const newHistory = [...cursorHistory];
+      newHistory.pop();
+      setCursorHistory(newHistory);
+      const prevCursor =
+        newHistory.length > 0 ? newHistory[newHistory.length - 1] : null;
+      setCurrentCursor(prevCursor);
+      fetchLogs(prevCursor);
     }
-  }
+  };
 
   const handlePageSizeChange = (value: string) => {
-    setPageSize(parseInt(value))
-    setCursorHistory([])
-    setCurrentCursor(null)
-  }
+    setPageSize(parseInt(value));
+    setCursorHistory([]);
+    setCurrentCursor(null);
+  };
 
   const formatTimeSpent = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    return `${hours}h ${minutes}m`
-  }
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
+  };
 
   const formatProjectName = (fullPath: string) => {
-    const projectName = fullPath.split('/').pop() || ''
-    if (fullPath.toLowerCase().includes('hydra')) return 'Hydra'
-    return projectName.charAt(0).toUpperCase() + projectName.slice(1)
-  }
+    const projectName = fullPath.split("/").pop() || "";
+    if (fullPath.toLowerCase().includes("hydra")) return "Hydra";
+    return projectName.charAt(0).toUpperCase() + projectName.slice(1);
+  };
 
   // Filter logs based on date range
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = logs.filter((log) => {
     if (!dateRange?.from) return true;
     const logDate = new Date(log.spentAt);
     return logDate >= new Date(dateRange.from);
@@ -305,31 +383,45 @@ export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTable
   const showingTo = currentPosition + filteredLogs.length;
   const hasNoResults = filteredLogs.length === 0;
 
-  if (loading && !logs.length) return (
-    <div className="space-y-4">
-      {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-    </div>
-  )
+  if (loading && !logs.length)
+    return (
+      <div className="space-y-4">
+        {[...Array(5)].map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full" />
+        ))}
+      </div>
+    );
 
-  if (error) return <div className="text-red-500">Error: {error}</div>
+  if (error) return <div className="text-red-500">Error: {error}</div>;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <span className="text-sm text-muted-foreground">Rows per page:</span>
-          <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={loading}>
+          <Select
+            value={pageSize.toString()}
+            onValueChange={handlePageSizeChange}
+            disabled={loading}
+          >
             <SelectTrigger className="h-8 w-[70px]">
               <SelectValue placeholder={pageSize.toString()} />
             </SelectTrigger>
             <SelectContent>
-              {[10, 20, 30, 40, 50].map(size => (
-                <SelectItem key={size} value={size.toString()}>{size}</SelectItem>
+              {[10, 20, 30, 40, 50].map((size) => (
+                <SelectItem key={size} value={size.toString()}>
+                  {size}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={exportToExcel} variant="outline" className="ml-4" disabled={loading || hasNoResults}>
+        <Button
+          onClick={exportToExcel}
+          variant="outline"
+          className="ml-4"
+          disabled={loading || hasNoResults}
+        >
           <FileDown className="mr-2 h-4 w-4" />
           Export Excel
         </Button>
@@ -348,7 +440,9 @@ export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTable
         <TableBody>
           {loading ? (
             <TableRow>
-              <TableCell colSpan={5} className="text-center">Loading...</TableCell>
+              <TableCell colSpan={5} className="text-center">
+                Loading...
+              </TableCell>
             </TableRow>
           ) : hasNoResults ? (
             <TableRow>
@@ -359,11 +453,13 @@ export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTable
           ) : (
             filteredLogs.map((log, index) => (
               <TableRow key={`${log.user.id}-${log.issue.id}-${index}`}>
-                <TableCell className="font-medium">{log.user.username}</TableCell>
+                <TableCell className="font-medium">
+                  {log.user.username}
+                </TableCell>
                 <TableCell>{formatProjectName(log.project.fullPath)}</TableCell>
-                <TableCell>{log.issue.id.split('/').pop()}</TableCell>
+                <TableCell>{log.issue.id.split("/").pop()}</TableCell>
                 <TableCell>{formatTimeSpent(log.timeSpent)}</TableCell>
-                <TableCell>{log.spentAt.toString().split('T')[0]}</TableCell>
+                <TableCell>{log.spentAt.toString().split("T")[0]}</TableCell>
               </TableRow>
             ))
           )}
@@ -372,11 +468,9 @@ export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTable
 
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          {hasNoResults ? (
-            `Showing 0 results`
-          ) : (
-            `Showing ${showingFrom} to ${showingTo} of ${totalCount} results`
-          )}
+          {hasNoResults
+            ? `Showing 0 results`
+            : `Showing ${showingFrom} to ${showingTo} of ${totalCount} results`}
         </div>
         <div className="flex items-center space-x-2">
           <Button
@@ -398,5 +492,5 @@ export function LogsTable({ dateRange, usernameFilter, apiDateRange }: LogsTable
         </div>
       </div>
     </div>
-  )
+  );
 }
