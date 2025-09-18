@@ -32,6 +32,8 @@ export default function LogsPage() {
     },
   });
 
+  const [reportedHours, setReportedHours] = useState(0); // Estado para armazenar as horas reportadas
+
   const handleSubmit = (values: {
     dateRange: { from: Date; to: Date };
     username?: string;
@@ -90,12 +92,12 @@ export default function LogsPage() {
     }[] = [];
     months.forEach((value, key) => {
       const totalHours = value.workingDays * 8;
-      const missingHours = totalHours - value.reportedHours; // Replace `value.reportedHours` with actual data if available
+      const missingHours = totalHours - reportedHours; // Subtrai as horas reportadas
       result.push({ month: key, workingDays: value.workingDays, missingHours });
     });
 
     return result;
-  }, [filters.dateRange]);
+  }, [filters.dateRange, reportedHours]); // Inclui reportedHours como dependência
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -161,28 +163,61 @@ export default function LogsPage() {
             dateRange={filters.dateRange}
             usernameFilter={filters.username}
             apiDateRange={filters.apiDateRange}
+            onReportedHoursUpdate={setReportedHours} // Passa o callback para o LogsTable
           />
           {filters.username && (
-            <div className="mt-4">
-              <h3 className="text-lg font-semibold">Working Days Summary</h3>
-              <ul className="list-disc pl-5">
-                {workingDaysInfo.map(
-                  ({
-                    month,
-                    workingDays,
-                    missingHours,
-                  }: {
-                    month: string;
-                    workingDays: number;
-                    missingHours: number;
-                  }) => (
-                    <li key={month}>
-                      {month}: {workingDays} working days, {missingHours} hours
-                      missing
-                    </li>
-                  )
-                )}
-              </ul>
+            <div className="mt-8">
+              <h3 className="text-xl font-semibold mb-4">
+                Working Days Summary
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-gray-200 rounded-md">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">
+                        Month
+                      </th>
+                      <th className="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">
+                        Working Days
+                      </th>
+                      <th className="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">
+                        Missing Hours
+                      </th>
+                      <th className="border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-600">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workingDaysInfo.map(
+                      ({ month, workingDays, missingHours }) => (
+                        <tr key={month} className="hover:bg-gray-50">
+                          <td className="border border-gray-200 px-4 py-2 text-sm text-gray-700">
+                            {month}
+                          </td>
+                          <td className="border border-gray-200 px-4 py-2 text-sm text-gray-700">
+                            {workingDays}
+                          </td>
+                          <td className="border border-gray-200 px-4 py-2 text-sm text-gray-700">
+                            {missingHours}
+                          </td>
+                          <td className="border border-gray-200 px-4 py-2 text-sm">
+                            {missingHours > 0 ? (
+                              <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-800 bg-red-100 rounded-md">
+                                Incomplete
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-md">
+                                Complete
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </CardContent>

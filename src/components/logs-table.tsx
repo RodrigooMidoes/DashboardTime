@@ -28,12 +28,14 @@ interface LogsTableProps {
   dateRange?: { from: Date; to: Date } | null;
   usernameFilter?: string;
   apiDateRange?: { from: Date; to: Date } | null;
+  onReportedHoursUpdate?: (reportedHours: number) => void;
 }
 
 export function LogsTable({
   dateRange,
   usernameFilter,
   apiDateRange,
+  onReportedHoursUpdate,
 }: LogsTableProps) {
   const [logs, setLogs] = useState<TimeLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,17 +69,6 @@ export function LogsTable({
     async (cursor: string | null = null) => {
       setLoading(true);
       try {
-        console.log("pageSize", pageSize);
-        console.log(
-          "startDate",
-          apiDateRange ? toGitlabDate(apiDateRange.from) : null
-        );
-        console.log(
-          "endDate",
-          apiDateRange ? format(apiDateRange.to, "yyyy-MM-dd") : null
-        );
-        console.log("usernameFilter", usernameFilter);
-
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_GITLAB_URL}/api/graphql`,
           {
@@ -97,25 +88,8 @@ export function LogsTable({
                 endDate: $endDate,
                 username: $username
               ) {
-                count
-                pageInfo {
-                  hasNextPage
-                  endCursor
-                }
                 nodes {
-                  project {
-                    id
-                    fullPath
-                  }
-                  issue {
-                    id
-                  }
                   timeSpent
-                  spentAt
-                  user {
-                    id
-                    username
-                  }
                 }
               }
             }
@@ -140,22 +114,15 @@ export function LogsTable({
 
         const result: ApiResponse = await response.json();
 
-        console.log("GraphQL response:", result);
+        const totalReportedHours = result.data.timelogs.nodes.reduce(
+          (sum, log) => sum + log.timeSpent / 3600, // Converte segundos para horas
+          0
+        );
 
-        const processedNodes = result.data.timelogs.nodes.map((log) => {
-          const localDate = convertToLocalDate(log.spentAt);
-          return {
-            ...log,
-            spentAt: localDate.toISOString(),
-            spentAtDisplay: format(localDate, "yyyy-MM-dd"),
-          };
-        });
-
-        setLogs(processedNodes);
-        setPageInfo(result.data.timelogs.pageInfo);
-        setTotalCount(result.data.timelogs.count);
-
-        if (cursor) setCursorHistory((prev) => [...prev, cursor]);
+        // Atualiza as horas reportadas no componente pai
+        if (onReportedHoursUpdate) {
+          onReportedHoursUpdate(totalReportedHours);
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "An unknown error occurred"
@@ -164,7 +131,7 @@ export function LogsTable({
         setLoading(false);
       }
     },
-    [apiDateRange, pageSize, usernameFilter]
+    [apiDateRange, pageSize, usernameFilter, onReportedHoursUpdate]
   );
 
   useEffect(() => {
