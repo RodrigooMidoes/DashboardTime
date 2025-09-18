@@ -37,9 +37,11 @@ export function LogsTable({
   apiDateRange,
   onReportedHoursUpdate,
 }: LogsTableProps) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [logs, setLogs] = useState<TimeLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [pageInfo, setPageInfo] = useState<PageInfo>({
     hasNextPage: false,
     endCursor: null,
@@ -47,6 +49,7 @@ export function LogsTable({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [currentCursor, setCurrentCursor] = useState<string | null>(null);
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [totalCount, setTotalCount] = useState<number>(0);
   const [pageSize, setPageSize] = useState<number>(20);
 
